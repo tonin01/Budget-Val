@@ -489,7 +489,11 @@ function deleteEntry(cat,idx){
   if(!confirm('Supprimer cette entrée ?'))return;
   data[MONTHS[currentMonth]][cat].entries.splice(idx,1);
   data[MONTHS[currentMonth]][cat].lastModified=Date.now();
-  saveData();renderMonth();toast('Supprimé');
+  saveData(true);
+  renderMonth();
+  toast('Supprimé');
+  // Push immédiat puis re-pull pour forcer la cohérence
+  if(syncUrl){ pushToSheets(true).then(()=>{ setTimeout(()=>pullFromCloud(),800); }); }
 }
 function openModal(){document.getElementById('modal-overlay').classList.add('open');setTimeout(()=>document.getElementById('m-amount').focus(),100);}
 function closeModal(){document.getElementById('modal-overlay').classList.remove('open');document.getElementById('m-amount').value='';document.getElementById('m-desc').value='';}
@@ -564,7 +568,7 @@ function saveScriptUrl(){
 function autoSync(){
   if(!syncUrl)return;
   clearTimeout(syncTimeout);
-  syncTimeout=setTimeout(()=>pushToSheets(true),2000);
+  syncTimeout=setTimeout(()=>pushToSheets(true),500);
 }
 
 async function pushToSheets(silent=false){
@@ -598,15 +602,13 @@ async function pushToSheets(silent=false){
   }
 }
 
-async function syncNow(){
-  if(!syncUrl){toast('Configure d\'abord l\'URL');return;}
-  setSyncDot('syncing');
-  toast('Synchronisation…');
+// Pull pur depuis le cloud (le cloud a toujours raison)
+async function pullFromCloud(silent=false){
+  if(!syncUrl) return;
   try {
-    const res=await fetch(syncUrl+'?action=get');
+    const res=await fetch(syncUrl+'?action=get&t='+Date.now());
     const json=await res.json();
     if(json.status==='ok'&&Object.keys(json.data).length>0){
-      // Merge : le cloud gagne si plus récent
       const remote=json.data;
       MONTHS.forEach(m=>{
         ['commun','filles'].forEach(cat=>{
@@ -614,30 +616,33 @@ async function syncNow(){
           if(remote[key]){
             try{
               const rd=JSON.parse(remote[key]);
-              // Merge basé sur timestamp : la version la plus récente gagne
               const local=data[m][cat];
               const remoteTs=rd.lastModified||0;
               const localTs=local.lastModified||0;
-              if(remoteTs>localTs){
-                data[m][cat]=rd;
-              }
+              if(remoteTs>=localTs){ data[m][cat]=rd; }
             }catch(e){}
           }
         });
       });
-      saveData(true); // save sans re-sync
+      saveData(true);
       lastSyncTime=Date.now();
       setSyncDot('synced');
       renderMonth();
-      toast('✓ Données synchronisées');
-      updateSyncStatus();
-    } else if(json.status==='ok'){
-      // Cloud vide → push local
-      await pushToSheets(true);
-      toast('✓ Données envoyées');
-    } else {
-      throw new Error(json.message);
+      if(!silent){ toast('✓ Données synchronisées'); updateSyncStatus(); }
     }
+  } catch(e){ if(!silent){ setSyncDot('error'); toast('Erreur pull: '+e.message); } }
+}
+
+async function syncNow(){
+  if(!syncUrl){toast('Configure d\'abord l\'URL');return;}
+  setSyncDot('syncing');
+  toast('Synchronisation…');
+  try {
+    // D'abord push local, puis pull cloud
+    await pushToSheets(true);
+    await pullFromCloud(true);
+    toast('✓ Synchronisé');
+    updateSyncStatus();
   } catch(e){
     setSyncDot('error');
     toast('Erreur : '+e.message);
@@ -676,7 +681,11 @@ document.getElementById('m-desc').addEventListener('keydown',e=>{if(e.key==='Ent
 
 // ── INIT ───────────────────────────────────────────────────
 renderMonth();
-if(syncUrl){setSyncDot('synced');}
+if(syncUrl){
+  setSyncDot('synced');
+  setTimeout(()=>pullFromCloud(true), 1500);
+  setInterval(()=>{ if(syncUrl) pullFromCloud(true); }, 30000);
+}
 </script>
 </body>
 </html>
