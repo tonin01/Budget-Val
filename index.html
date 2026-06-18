@@ -637,11 +637,10 @@ async function pullFromCloud(silent=false){
   }
 }
 
-// Bouton Sync : push puis pull
+// Bouton Sync : pull uniquement depuis le cloud
 async function syncNow(){
   if(!syncUrl){toast('Configure l\'URL dans Réglages');return;}
   setSyncDot('syncing');
-  await pushToSheets(true);
   await pullFromCloud(false);
 }
 
