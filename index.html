@@ -33,6 +33,7 @@ body{display:flex;flex-direction:column;max-width:430px;margin:0 auto;position:r
 .sync-dot.syncing{background:var(--gold);animation:pulse .8s ease-in-out infinite}
 .sync-dot.error{background:var(--danger)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes spin{to{transform:rotate(360deg)}}
 .header-soldes{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .solde-pill{background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px}
 .solde-pill .label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px}
@@ -161,7 +162,12 @@ body{display:flex;flex-direction:column;max-width:430px;margin:0 auto;position:r
       <span class="month-name" id="hdr-month">Juin</span>
       <button onclick="changeMonth(1)">&#8250;</button>
     </div>
+    <div style="display:flex;align-items:center;gap:8px">
+    <button onclick="syncNow()" style="background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:var(--gold);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px">
+      <span id="sync-icon">⟳</span> Sync
+    </button>
     <span id="sync-dot" class="sync-dot" title="Statut sync"></span>
+  </div>
   </div>
   <div class="header-soldes">
     <div class="solde-pill">
@@ -535,6 +541,8 @@ function goMonth(idx){currentMonth=idx;switchView('month');renderMonth();}
 
 // ── SYNC ───────────────────────────────────────────────────
 function setSyncDot(state){
+  const icon=document.getElementById('sync-icon');
+  if(icon) icon.style.animation=state==='syncing'?'spin .6s linear infinite':'none';
   ['sync-dot','sync-dot-settings'].forEach(id=>{
     const el=document.getElementById(id);
     if(el){el.className='sync-dot '+state;}
@@ -568,6 +576,7 @@ function saveScriptUrl(){
 function autoSync(){
   if(!syncUrl)return;
   clearTimeout(syncTimeout);
+  // Push immédiat : l'utilisateur vient de modifier quelque chose
   syncTimeout=setTimeout(()=>pushToSheets(true),500);
 }
 
@@ -638,8 +647,7 @@ async function syncNow(){
   setSyncDot('syncing');
   toast('Synchronisation…');
   try {
-    // D'abord push local, puis pull cloud
-    await pushToSheets(true);
+    // Pull uniquement — le cloud a toujours raison
     await pullFromCloud(true);
     toast('✓ Synchronisé');
     updateSyncStatus();
