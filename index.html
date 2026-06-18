@@ -162,12 +162,12 @@ body{display:flex;flex-direction:column;max-width:430px;margin:0 auto;position:r
       <span class="month-name" id="hdr-month">Juin</span>
       <button onclick="changeMonth(1)">&#8250;</button>
     </div>
-    <div style="display:flex;align-items:center;gap:8px">
-    <button onclick="syncNow()" style="background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:var(--gold);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px">
-      <span id="sync-icon">⟳</span> Sync
-    </button>
     <span id="sync-dot" class="sync-dot" title="Statut sync"></span>
   </div>
+  <div style="display:flex;justify-content:center;margin-bottom:8px">
+    <button onclick="syncNow()" style="background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:var(--gold);border-radius:20px;padding:5px 20px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;width:100%">
+      <span id="sync-icon" style="font-size:15px">⟳</span> Synchroniser
+    </button>
   </div>
   <div class="header-soldes">
     <div class="solde-pill">
@@ -576,15 +576,13 @@ function saveScriptUrl(){
 function autoSync(){
   if(!syncUrl)return;
   clearTimeout(syncTimeout);
-  // Push immédiat : l'utilisateur vient de modifier quelque chose
-  syncTimeout=setTimeout(()=>pushToSheets(true),500);
+  syncTimeout=setTimeout(()=>pushToSheets(true),800);
 }
 
+// Pousse les données locales vers le cloud
 async function pushToSheets(silent=false){
-  if(!syncUrl){if(!silent)toast('Configure d\'abord l\'URL');return;}
-  setSyncDot('syncing');
+  if(!syncUrl) return;
   try {
-    // Sérialise les données en paires clé/valeur
     const flat={};
     MONTHS.forEach(m=>{
       ['commun','filles'].forEach(cat=>{
@@ -599,62 +597,52 @@ async function pushToSheets(silent=false){
     if(json.status==='ok'){
       lastSyncTime=Date.now();
       setSyncDot('synced');
-      if(!silent)toast('✓ Données envoyées au cloud');
       updateSyncStatus();
-    } else {
-      throw new Error(json.message||'Erreur inconnue');
-    }
+    } else { throw new Error(json.message||'Erreur'); }
   } catch(e){
     setSyncDot('error');
-    if(!silent)toast('Erreur sync : '+e.message);
-    console.error(e);
+    if(!silent) toast('Erreur push : '+e.message);
   }
 }
 
-// Pull pur depuis le cloud (le cloud a toujours raison)
+// Tire les données du cloud et fusionne par timestamp
 async function pullFromCloud(silent=false){
   if(!syncUrl) return;
   try {
     const res=await fetch(syncUrl+'?action=get&t='+Date.now());
     const json=await res.json();
     if(json.status==='ok'&&Object.keys(json.data).length>0){
-      const remote=json.data;
+      let changed=false;
       MONTHS.forEach(m=>{
         ['commun','filles'].forEach(cat=>{
           const key=m+'_'+cat;
-          if(remote[key]){
+          if(json.data[key]){
             try{
-              const rd=JSON.parse(remote[key]);
-              const local=data[m][cat];
+              const rd=JSON.parse(json.data[key]);
+              const localTs=data[m][cat].lastModified||0;
               const remoteTs=rd.lastModified||0;
-              const localTs=local.lastModified||0;
-              if(remoteTs>=localTs){ data[m][cat]=rd; }
+              if(remoteTs>localTs){ data[m][cat]=rd; changed=true; }
             }catch(e){}
           }
         });
       });
-      saveData(true);
+      if(changed){ saveData(true); renderMonth(); }
       lastSyncTime=Date.now();
       setSyncDot('synced');
-      renderMonth();
-      if(!silent){ toast('✓ Données synchronisées'); updateSyncStatus(); }
+      if(!silent){ toast('✓ Synchronisé'); updateSyncStatus(); }
     }
-  } catch(e){ if(!silent){ setSyncDot('error'); toast('Erreur pull: '+e.message); } }
-}
-
-async function syncNow(){
-  if(!syncUrl){toast('Configure d\'abord l\'URL');return;}
-  setSyncDot('syncing');
-  toast('Synchronisation…');
-  try {
-    // Pull uniquement — le cloud a toujours raison
-    await pullFromCloud(true);
-    toast('✓ Synchronisé');
-    updateSyncStatus();
   } catch(e){
     setSyncDot('error');
-    toast('Erreur : '+e.message);
+    if(!silent) toast('Erreur sync : '+e.message);
   }
+}
+
+// Bouton Sync : push puis pull
+async function syncNow(){
+  if(!syncUrl){toast('Configure l\'URL dans Réglages');return;}
+  setSyncDot('syncing');
+  await pushToSheets(true);
+  await pullFromCloud(false);
 }
 
 // ── UTILS ──────────────────────────────────────────────────
