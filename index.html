@@ -605,28 +605,23 @@ async function pushToSheets(silent=false){
   }
 }
 
-// Tire les données du cloud et fusionne par timestamp
+// Tire les données du cloud — le cloud remplace tout
 async function pullFromCloud(silent=false){
   if(!syncUrl) return;
   try {
     const res=await fetch(syncUrl+'?action=get&t='+Date.now());
     const json=await res.json();
     if(json.status==='ok'&&Object.keys(json.data).length>0){
-      let changed=false;
       MONTHS.forEach(m=>{
         ['commun','filles'].forEach(cat=>{
           const key=m+'_'+cat;
           if(json.data[key]){
-            try{
-              const rd=JSON.parse(json.data[key]);
-              const localTs=data[m][cat].lastModified||0;
-              const remoteTs=rd.lastModified||0;
-              if(remoteTs>localTs){ data[m][cat]=rd; changed=true; }
-            }catch(e){}
+            try{ data[m][cat]=JSON.parse(json.data[key]); }catch(e){}
           }
         });
       });
-      if(changed){ saveData(true); renderMonth(); }
+      saveData(true);
+      renderMonth();
       lastSyncTime=Date.now();
       setSyncDot('synced');
       if(!silent){ toast('✓ Synchronisé'); updateSyncStatus(); }
