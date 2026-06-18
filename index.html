@@ -482,11 +482,13 @@ function addInline(cat){
   if(isNaN(a)){toast('Montant invalide');return;}
   const d=document.getElementById('inp-desc-'+cat).value.trim()||'—';
   data[MONTHS[currentMonth]][cat].entries.push({amount:a,desc:d,ts:Date.now()});
+  data[MONTHS[currentMonth]][cat].lastModified=Date.now();
   saveData();renderMonth();toast('✓ Ajouté');
 }
 function deleteEntry(cat,idx){
   if(!confirm('Supprimer cette entrée ?'))return;
   data[MONTHS[currentMonth]][cat].entries.splice(idx,1);
+  data[MONTHS[currentMonth]][cat].lastModified=Date.now();
   saveData();renderMonth();toast('Supprimé');
 }
 function openModal(){document.getElementById('modal-overlay').classList.add('open');setTimeout(()=>document.getElementById('m-amount').focus(),100);}
@@ -498,6 +500,7 @@ function addEntry(){
   const d=document.getElementById('m-desc').value.trim()||'—';
   if(isNaN(a)){toast('Montant invalide');return;}
   data[MONTHS[currentMonth]][cat].entries.push({amount:a,desc:d,ts:Date.now()});
+  data[MONTHS[currentMonth]][cat].lastModified=Date.now();
   saveData();closeModal();renderMonth();
   if(currentView==='annual')renderAnnual();
   toast('✓ Ajouté');
@@ -611,9 +614,11 @@ async function syncNow(){
           if(remote[key]){
             try{
               const rd=JSON.parse(remote[key]);
-              // Simple merge : prend le plus grand nombre d'entrées
+              // Merge basé sur timestamp : la version la plus récente gagne
               const local=data[m][cat];
-              if((rd.entries||[]).length>(local.entries||[]).length){
+              const remoteTs=rd.lastModified||0;
+              const localTs=local.lastModified||0;
+              if(remoteTs>localTs){
                 data[m][cat]=rd;
               }
             }catch(e){}
